@@ -26,7 +26,7 @@ class TaskAdapter(private val list: MutableList<ToDoData>) : RecyclerView.Adapte
         with(holder) {
             with(list[position]) {
                 binding.todoTask.text = this.task
-
+                binding.todoDescription.text = this.taskDescription
                 Log.d(TAG, "onBindViewHolder: $this")
                 binding.editTask.setOnClickListener {
                     listener?.onEditItemClicked(this , position)

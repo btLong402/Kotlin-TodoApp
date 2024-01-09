@@ -25,11 +25,12 @@ class ToDoDialogFragment : DialogFragment() {
     companion object {
         const val TAG = "DialogFragment"
         @JvmStatic
-        fun newInstance(taskId: String, task: String) =
+        fun newInstance(taskId: String, task: String,description: String) =
             ToDoDialogFragment().apply {
                 arguments = Bundle().apply {
                     putString("taskId", taskId)
                     putString("task", task)
+                    putString("description", description)
                 }
             }
     }
@@ -51,8 +52,13 @@ class ToDoDialogFragment : DialogFragment() {
 
         if (arguments != null){
 
-            toDoData = ToDoData(arguments?.getString("taskId").toString() ,arguments?.getString("task").toString())
+            toDoData = ToDoData(
+                arguments?.getString("taskId").toString(),
+                arguments?.getString("task").toString(),
+                arguments?.getString("description").toString()
+            )
             binding.todoEt.setText(toDoData?.task)
+            binding.todoEtDescription.setText(toDoData?.taskDescription)
         }
 
 
@@ -63,12 +69,14 @@ class ToDoDialogFragment : DialogFragment() {
         binding.todoNextBtn.setOnClickListener {
 
             val todoTask = binding.todoEt.text.toString()
+            val todoDescription = binding.todoEtDescription.text.toString()
             if (todoTask.isNotEmpty()){
                 if (toDoData == null){
-                    listener?.saveTask(todoTask , binding.todoEt)
+                    listener?.saveTask(todoTask, todoDescription, binding.todoEt,binding.todoEtDescription)
                 }else{
                     toDoData!!.task = todoTask
-                    listener?.updateTask(toDoData!!, binding.todoEt)
+                    toDoData!!.taskDescription = todoDescription
+                    listener?.updateTask(toDoData!!, binding.todoEt,binding.todoEtDescription)
                 }
 
             }
@@ -76,8 +84,8 @@ class ToDoDialogFragment : DialogFragment() {
     }
 
     interface OnDialogNextBtnClickListener{
-        fun saveTask(todoTask:String , todoEdit:TextInputEditText)
-        fun updateTask(toDoData: ToDoData , todoEdit:TextInputEditText)
+        fun saveTask(todoTask:String, todoDescription: String, todoEdit:TextInputEditText,todoEditDescription:TextInputEditText)
+        fun updateTask(toDoData: ToDoData, todoEdit:TextInputEditText,todoEditDescription:TextInputEditText)
     }
 
 }

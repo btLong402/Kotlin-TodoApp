@@ -9,4 +9,7 @@
     <string name="drawer_item">Logout</string>
     <string name="open_nav">Open Navigation Drawer</string>
     <string name="close_nav">Close Navigation Drawer</string>
+    <string name="type_your_description">Type your description .....</string>
+    <string name="task_name">Task Name</string>
+    <string name="task_description">Task Description</string>
 </resources>
