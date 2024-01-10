@@ -91,4 +91,24 @@ class TaskDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         }
         return taskList
     }
+
+    fun truncateTasks() {
+        val db = this.writableDatabase
+        db.execSQL("DELETE FROM ${TaskEntry.TABLE_NAME}")
+        db.execSQL("VACUUM")
+        db.close()
+    }
+
+    fun getLastInsertId(): Long {
+        val db = this.readableDatabase
+        val cursor = db.rawQuery("SELECT last_insert_rowid()", null)
+        var id: Long = -1
+        if (cursor.moveToFirst()) {
+            id = cursor.getLong(0)
+        }
+        cursor.close()
+        db.close()
+        return id
+    }
+
 }

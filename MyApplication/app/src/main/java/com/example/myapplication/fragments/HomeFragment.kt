@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.myapplication.R
 import com.example.myapplication.databinding.FragmentHomeBinding
 import com.example.myapplication.utils.InternetUtil
+import com.example.myapplication.utils.NetworkLiveData
 import com.example.myapplication.utils.TaskDbHelper
 import com.example.myapplication.utils.adapter.TaskAdapter
 import com.example.myapplication.utils.model.ToDoData
@@ -42,6 +43,8 @@ class HomeFragment : Fragment() ,ToDoDialogFragment.OnDialogNextBtnClickListener
     private lateinit var taskAdapter: TaskAdapter
     private lateinit var toDoItemList: MutableList<ToDoData>
     private lateinit var dbHelper: TaskDbHelper
+    private lateinit var networkLiveData: NetworkLiveData
+
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -58,9 +61,24 @@ class HomeFragment : Fragment() ,ToDoDialogFragment.OnDialogNextBtnClickListener
         super.onViewCreated(view, savedInstanceState)
 
         init()
+        if (internetUtil.checkForInternet(requireContext())) {
+            getTaskFromFirebase()
+        }
+        else{
+            toDoItemList.clear()
+            val localTasks = dbHelper.getTasks() // You need to implement this method in your TaskDbHelper class
+            toDoItemList.addAll(localTasks)
+            taskAdapter.notifyDataSetChanged()
+        }
 
-        //get data from firebase
-        getTaskFromFirebase()
+        networkLiveData = NetworkLiveData(requireContext())
+        networkLiveData.observe(viewLifecycleOwner) { isConnected ->
+            if (isConnected) {
+                pushLocalTasksToFirebase()
+                dbHelper.truncateTasks()
+                getTaskFromFirebase()
+            }
+        }
 
 
         binding.addTaskBtn.setOnClickListener {
@@ -74,7 +92,6 @@ class HomeFragment : Fragment() ,ToDoDialogFragment.OnDialogNextBtnClickListener
                 childFragmentManager,
                 ToDoDialogFragment.TAG
             )
-
         }
     }
 
@@ -107,6 +124,22 @@ class HomeFragment : Fragment() ,ToDoDialogFragment.OnDialogNextBtnClickListener
         })
     }
 
+    private fun pushLocalTasksToFirebase() {
+        if (internetUtil.checkForInternet(requireContext())) {
+            val localTasks = dbHelper.getTasks()
+            localTasks.forEach { task ->
+                val todoData = ToDoData(database.push().key.toString(), task.task, task.taskDescription)
+                database.push().setValue(todoData).addOnCompleteListener {
+                    if (it.isSuccessful) {
+                        Toast.makeText(context, "Local task ${task.task} pushed to Firebase", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, it.exception.toString(), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
     private fun init() {
         auth = FirebaseAuth.getInstance()
         authId = auth.currentUser!!.uid
@@ -125,47 +158,73 @@ class HomeFragment : Fragment() ,ToDoDialogFragment.OnDialogNextBtnClickListener
     }
 
     override fun saveTask(todoTask:String, todoDescription: String, todoEdit:TextInputEditText,todoEditDescription:TextInputEditText){
-        dbHelper.addTask(todoTask, todoDescription);
-        val todoData = ToDoData(database.push().key.toString(), todoTask, todoDescription)
-    database
-            .push().setValue(todoData)
-            .addOnCompleteListener {
-                if (it.isSuccessful) {
-                    Toast.makeText(context, "Task Added Successfully", Toast.LENGTH_SHORT).show()
-                    todoEdit.text = null
-                    todoEditDescription.text = null
+        if(internetUtil.checkForInternet(requireContext())) {
+            val todoData = ToDoData(database.push().key.toString(), todoTask, todoDescription)
+            database
+                .push().setValue(todoData)
+                .addOnCompleteListener {
+                    if (it.isSuccessful) {
+                        Toast.makeText(context, "Task Added Successfully", Toast.LENGTH_SHORT)
+                            .show()
+                        todoEdit.text = null
+                        todoEditDescription.text = null
 
-                } else {
-                    Toast.makeText(context, it.exception.toString(), Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, it.exception.toString(), Toast.LENGTH_SHORT).show()
+                    }
                 }
-            }
+        }
+        else{
+            dbHelper.addTask(todoTask, todoDescription)
+            val newTask = ToDoData(dbHelper.getLastInsertId().toString(), todoTask, todoDescription) // You need to implement the getLastInsertId method in your TaskDbHelper class
+            toDoItemList.add(newTask)
+            taskAdapter.notifyDataSetChanged()
+            Toast.makeText(context, "No internet connection. Task saved locally.", Toast.LENGTH_SHORT).show()
+        }
         frag!!.dismiss()
 
     }
 
     override fun updateTask(toDoData: ToDoData, todoEdit: TextInputEditText,todoEditDescription: TextInputEditText){
-        dbHelper.updateTask(toDoData)
-        database.child(toDoData.taskId).setValue(toDoData).addOnCompleteListener {
 
-            if (it.isSuccessful) {
-                Toast.makeText(context, "Updated Successfully", Toast.LENGTH_SHORT).show()
-                todoEdit.text = null
-                todoEditDescription.text = null
-            } else {
-                Toast.makeText(context, it.exception.toString(), Toast.LENGTH_SHORT).show()
+        if (internetUtil.checkForInternet(requireContext())) {
+            database.child(toDoData.taskId).setValue(toDoData).addOnCompleteListener {
+                if (it.isSuccessful) {
+                    Toast.makeText(context, "Updated Successfully", Toast.LENGTH_SHORT).show()
+                    todoEdit.text = null
+                    todoEditDescription.text = null
+                } else {
+                    Toast.makeText(context, it.exception.toString(), Toast.LENGTH_SHORT).show()
+                }
+                frag!!.dismiss()
             }
+        } else {
+            dbHelper.updateTask(toDoData)
+            val taskIndex = toDoItemList.indexOfFirst { it.taskId == toDoData.taskId }
+            if (taskIndex != -1) {
+                toDoItemList[taskIndex] = toDoData
+                taskAdapter.notifyDataSetChanged()
+            }
+            Toast.makeText(context, "No internet connection. Task updated locally.", Toast.LENGTH_SHORT).show()
             frag!!.dismiss()
         }
     }
 
     override fun onDeleteItemClicked(toDoData: ToDoData, position: Int) {
-        dbHelper.deleteTask(toDoData)
-        database.child(toDoData.taskId).removeValue().addOnCompleteListener {
-            if (it.isSuccessful) {
-                Toast.makeText(context, "Deleted Successfully", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, it.exception.toString(), Toast.LENGTH_SHORT).show()
+        if (internetUtil.checkForInternet(requireContext())) {
+            database.child(toDoData.taskId).removeValue().addOnCompleteListener {
+                if (it.isSuccessful) {
+                    Toast.makeText(context, "Deleted Successfully", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, it.exception.toString(), Toast.LENGTH_SHORT).show()
+                }
             }
+        }
+        else{
+            dbHelper.deleteTask(toDoData)
+            toDoItemList.removeAt(position)
+            taskAdapter.notifyDataSetChanged()
+            Toast.makeText(context, "No internet connection. Task deleted locally.", Toast.LENGTH_SHORT).show()
         }
     }
 
